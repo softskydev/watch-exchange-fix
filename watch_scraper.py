@@ -209,76 +209,70 @@ class WatchScraper:
             return detailed_info
         
         try:
-            # Extract description from meta tags first
-            meta_desc = soup.find('meta', attrs={'name': 'description'})
-            if meta_desc and meta_desc.get('content'):
-                detailed_info['description'] = meta_desc.get('content').strip()
-            
-            # If no meta description, look for product description or summary
-            if not detailed_info['description']:
-                description_selectors = [
-                    '.woocommerce-product-details__short-description',
-                    '.entry-summary .woocommerce-product-details__short-description',
-                    '.product-description',
-                    '.summary .woocommerce-product-details__short-description p',
-                    '.entry-summary p',
-                    '.product-info p',
-                    '.single-product-summary p'
-                ]
-                
-                for selector in description_selectors:
-                    desc_elem = soup.select_one(selector)
-                    if desc_elem:
-                        desc_text = desc_elem.get_text(strip=True)
-                        if len(desc_text) > 20:  # Ensure it's meaningful content
-                            detailed_info['description'] = desc_text
-                            break
-            
-            # Extract year from structured JSON-LD data first
-            structured_data = soup.find_all('script', type='application/ld+json')
-            for script in structured_data:
-                try:
-                    if script.string:
-                        data = json.loads(script.string)
-                        if isinstance(data, dict):
-                            # Look for release date or manufacturing date
-                            if 'releaseDate' in data:
-                                year_match = re.search(r'(\d{4})', str(data['releaseDate']))
-                                if year_match:
-                                    year_int = int(year_match.group(1))
-                                    if 1950 <= year_int <= 2025:
-                                        detailed_info['year'] = year_int
-                                        break
-                            
-                            # Look for year in product description or name
-                            if 'description' in data:
-                                year_match = re.search(r'(\d{4})', str(data['description']))
-                                if year_match:
-                                    year_int = int(year_match.group(1))
-                                    if 1950 <= year_int <= 2025:
-                                        detailed_info['year'] = year_int
-                                        break
-                except (json.JSONDecodeError, ValueError):
-                    continue
-            
-            # If no year from structured data, search in page content
-            if not detailed_info['year']:
-                page_text = soup.get_text()
-                year_patterns = [
-                    r'Year[:\s]*(\d{4})',
-                    r'(\d{4})\s*model',
-                    r'circa\s*(\d{4})',
-                    r'manufactured\s*in\s*(\d{4})',
-                    r'production\s*year[:\s]*(\d{4})'
-                ]
-                
-                for pattern in year_patterns:
-                    year_match = re.search(pattern, page_text, re.IGNORECASE)
+            # Extract year from "Date of Purchase" field first (priority approach)
+            purchase_date_section = soup.find('p', class_='singleproduct-inner-heading', string='Date of Purchase')
+            if purchase_date_section:
+                # Get the next sibling p tag that contains the date
+                date_value = purchase_date_section.find_next_sibling('p')
+                if date_value:
+                    date_text = date_value.get_text(strip=True)
+                    # Extract 4-digit year from date text (e.g., "May 2024" -> 2024)
+                    year_match = re.search(r'(\d{4})', date_text)
                     if year_match:
                         year_int = int(year_match.group(1))
-                        if 1950 <= year_int <= 2025:
+                        if 1950 <= year_int <= 2030:  # Reasonable year range for watches
                             detailed_info['year'] = year_int
-                            break
+            
+            # If no year from Date of Purchase, try other methods
+            if not detailed_info['year']:
+                # Extract year from structured JSON-LD data
+                structured_data = soup.find_all('script', type='application/ld+json')
+                for script in structured_data:
+                    try:
+                        if script.string:
+                            data = json.loads(script.string)
+                            if isinstance(data, dict):
+                                # Look for release date or manufacturing date
+                                if 'releaseDate' in data:
+                                    year_match = re.search(r'(\d{4})', str(data['releaseDate']))
+                                    if year_match:
+                                        year_int = int(year_match.group(1))
+                                        if 1950 <= year_int <= 2030:
+                                            detailed_info['year'] = year_int
+                                            break
+                                
+                                # Look for year in product description or name
+                                if 'description' in data:
+                                    year_match = re.search(r'(\d{4})', str(data['description']))
+                                    if year_match:
+                                        year_int = int(year_match.group(1))
+                                        if 1950 <= year_int <= 2030:
+                                            detailed_info['year'] = year_int
+                                            break
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+                
+                # If still no year, search in page content for common year patterns
+                if not detailed_info['year']:
+                    page_text = soup.get_text()
+                    year_patterns = [
+                        r'Year[:\s]*(\d{4})',
+                        r'(\d{4})\s*model',
+                        r'circa\s*(\d{4})',
+                        r'manufactured\s*in\s*(\d{4})',
+                        r'production\s*year[:\s]*(\d{4})'
+                    ]
+                    
+                    for pattern in year_patterns:
+                        year_match = re.search(pattern, page_text, re.IGNORECASE)
+                        if year_match:
+                            year_int = int(year_match.group(1))
+                            if 1950 <= year_int <= 2030:
+                                detailed_info['year'] = year_int
+                                break
+            
+            # For description, we'll set it in the main scraping function using the full brand model text
+            # This is because we need access to the _full_brand_model field from basic info
             
         except Exception as e:
             logger.error(f"Error extracting detailed info from {product_url}: {e}")
