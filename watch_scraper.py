@@ -74,6 +74,60 @@ class WatchScraper:
                     logger.error(f"Failed to fetch {url} after {retry_count} attempts")
         return None
     
+    def extract_main_brand_name(self, full_brand_text: str) -> str:
+        """
+        Extract main brand name from full brand + model text
+        
+        Args:
+            full_brand_text: Full brand and model text (e.g., "Rolex Sky Dweller Oysterflex")
+            
+        Returns:
+            Main brand name (e.g., "ROLEX")
+        """
+        if not full_brand_text:
+            return full_brand_text
+        
+        # Define brand patterns - order matters (longer brands first)
+        brand_patterns = [
+            r'^Audemars Piguet',
+            r'^Patek Philippe', 
+            r'^Vacheron Constantin',
+            r'^A\. Lange & Söhne',
+            r'^Franck Muller',
+            r'^Bell & Ross',
+            r'^Tag Heuer',
+            r'^Jaeger-LeCoultre',
+            r'^Omega',
+            r'^Rolex',
+            r'^Tudor',
+            r'^Cartier',
+            r'^Hublot',
+            r'^Breitling',
+            r'^Panerai',
+            r'^IWC',
+            r'^Zenith',
+            r'^Montblanc',
+            r'^Longines',
+            r'^Tissot',
+            r'^Seiko',
+            r'^Casio',
+            r'^Citizen',
+        ]
+        
+        for pattern in brand_patterns:
+            match = re.search(pattern, full_brand_text, re.IGNORECASE)
+            if match:
+                brand_name = match.group(0)
+                # Return in proper case for multi-word brands, uppercase for single words
+                if ' ' in brand_name:
+                    return brand_name  # Keep original case for multi-word brands
+                else:
+                    return brand_name.upper()  # Uppercase for single word brands
+        
+        # If no pattern matches, extract first word and uppercase it
+        first_word = full_brand_text.split()[0] if full_brand_text.split() else full_brand_text
+        return first_word.upper()
+
     def extract_product_basic_info(self, product_element) -> Dict:
         """
         Extract basic product information from listing page
@@ -96,8 +150,10 @@ class WatchScraper:
             brand_model_elem = product_element.find('h2')
             if brand_model_elem:
                 brand_model_text = brand_model_elem.get_text(strip=True)
-                # For the "brand" field, use the full brand + model text as requested in example
-                product_data['brand'] = brand_model_text
+                # Extract main brand name only
+                product_data['brand'] = self.extract_main_brand_name(brand_model_text)
+                # Store full text for description use
+                product_data['_full_brand_model'] = brand_model_text
             
             # Extract reference number from h3 tag
             reference_elem = product_element.find('h3')
