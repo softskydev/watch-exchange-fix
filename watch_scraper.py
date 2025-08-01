@@ -318,12 +318,12 @@ class WatchScraper:
                     # Extract detailed info
                     detailed_info = self.extract_product_detailed_info(product_data['product_url'])
                     product_data.update(detailed_info)
-                    
-                    # Set improved description using brand + series format
-                    if product_data.get('_full_brand_model'):
-                        product_data['description'] = product_data['_full_brand_model']
-                        # Remove the temporary field
-                        del product_data['_full_brand_model']
+                
+                # Set improved description using brand + series format (whether detailed info was extracted or not)
+                if product_data.get('_full_brand_model'):
+                    product_data['description'] = product_data['_full_brand_model']
+                    # Remove the temporary field
+                    del product_data['_full_brand_model']
                 
                 # Add metadata
                 product_data.update({
